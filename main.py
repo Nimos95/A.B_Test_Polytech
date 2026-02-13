@@ -16,7 +16,7 @@ from src.config import config
 from src.data_loader import JiraDataLoader
 from src.analysis import ABTestAnalyzer
 from src.visualization import ABTestVisualizer
-from src.utils import save_results, print_header, print_success, print_warning
+from src.utils import save_results, print_header, print_success, print_warning, print_error
 
 def main():
     """Запуск анализа A/B-теста"""

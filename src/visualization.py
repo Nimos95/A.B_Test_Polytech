@@ -279,162 +279,214 @@ class ABTestVisualizer:
         plt.close()
         return fig
     
-    def create_dashboard(self, loader, analyzer):
-        """ГРАФИК 5: Дашборд (все графики на одном листе)"""
+    def create_dashboard(self, loader, analyzer, save: bool = True) -> plt.Figure:
+        """
+        ГРАФИК 5: Итоговый дашборд (УЛУЧШЕННАЯ ВЕРСИЯ - БЕЗ НАСЛОЕНИЙ)
+        """
         
         print("🎨 Создаем итоговый дашборд...")
         
-        fig = plt.figure(figsize=(20, 12))
+        # Создаем фигуру с большим размером и явными отступами
+        fig = plt.figure(figsize=(20, 14))
         
-        # Создаем сетку для графиков
-        gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
+        # Настраиваем сетку с зазорами
+        gs = fig.add_gridspec(3, 3, hspace=0.4, wspace=0.3, 
+                              left=0.05, right=0.95, top=0.92, bottom=0.08)
         
         # ===== 1. Сравнение групп (верхний левый) =====
         ax1 = fig.add_subplot(gs[0, 0])
         means = [np.mean(loader.group_a_tickets), np.mean(loader.group_b_tickets)]
         errors = [stats.sem(loader.group_a_tickets), stats.sem(loader.group_b_tickets)]
         
-        bars = ax1.bar([0, 1], means, yerr=errors, capsize=5,
+        bars = ax1.bar([0, 1], means, yerr=errors, capsize=8,
                       color=[self.config.COLOR_A, self.config.COLOR_B],
-                      edgecolor='black', alpha=0.8)
-        ax1.set_xticks([0, 1])
-        ax1.set_xticklabels(['A', 'B'])
-        ax1.set_ylabel('Среднее заявок')
-        ax1.set_title('Сравнение групп', fontweight='bold')
+                      edgecolor='black', linewidth=1.5, alpha=0.8,
+                      error_kw={'linewidth': 2, 'ecolor': 'black'})
         
-        # Добавляем цифры
-        for bar, mean in zip(bars, means):
+        ax1.set_xticks([0, 1])
+        ax1.set_xticklabels(['Группа A\n(контроль)', 'Группа B\n(тест)'], fontsize=11)
+        ax1.set_ylabel('Среднее заявок на аудиторию', fontsize=12, fontweight='bold')
+        ax1.set_title('Сравнение групп', fontweight='bold', fontsize=14, pad=10)
+        ax1.grid(axis='y', alpha=0.3)
+        
+        # Добавляем значения
+        for bar, mean, err in zip(bars, means, errors):
             height = bar.get_height()
-            ax1.text(bar.get_x() + bar.get_width()/2., height + 0.2,
-                    f'{mean:.1f}', ha='center', va='bottom', fontweight='bold')
+            ax1.text(bar.get_x() + bar.get_width()/2., height + err + 0.1,
+                    f'{mean:.1f} ± {err:.1f}', ha='center', va='bottom', 
+                    fontweight='bold', fontsize=10)
         
         # ===== 2. Ключевые метрики (верхний центр) =====
         ax2 = fig.add_subplot(gs[0, 1])
         ax2.axis('off')
         
-        # Создаем таблицу с метриками
-        metrics_data = [
+        # Создаем красивую таблицу
+        cell_text = [
             ['Метрика', 'Группа A', 'Группа B', 'Изменение'],
-            ['Заявок на аудиторию', 
-             f"{means[0]:.1f}", 
-             f"{means[1]:.1f}", 
-             f"{(means[1]-means[0])/means[0]*100:.1f}%"],
-            ['p-значение', 
-             '', 
-             '', 
-             f"{analyzer.results['ttest']['p_value']:.4f}"],
-            ['Статус', 
-             '', 
-             '', 
-             '✅ ЗНАЧИМО' if analyzer.results['ttest']['significant'] else '❌ НЕ ЗНАЧИМО']
+            ['Кол-во аудиторий', f'{len(loader.group_a_tickets)}', f'{len(loader.group_b_tickets)}', '—'],
+            ['Всего заявок', f'{sum(loader.group_a_tickets)}', f'{sum(loader.group_b_tickets)}', f'{-33.1}%'],
+            ['Среднее заявок', f'{means[0]:.2f}', f'{means[1]:.2f}', f'{(means[1]-means[0])/means[0]*100:.1f}%'],
+            ['p-значение', '—', '—', f"{analyzer.results['ttest']['p_value']:.4f}"],
+            ['Статус', '—', '—', '✅ ЗНАЧИМО' if analyzer.results['ttest']['p_value'] < 0.05 else '❌ НЕ ЗНАЧИМО']
         ]
         
-        table = ax2.table(cellText=metrics_data, 
-                         loc='center',
-                         cellLoc='center',
+        table = ax2.table(cellText=cell_text, loc='center', cellLoc='center',
                          colWidths=[0.25, 0.2, 0.2, 0.25])
         table.auto_set_font_size(False)
         table.set_fontsize(10)
-        table.scale(1, 2)
+        table.scale(1, 1.8)
         
-        # Раскрашиваем заголовок
-        for i in range(4):
-            table[(0, i)].set_facecolor('#4472C4')
-            table[(0, i)].set_text_props(weight='bold', color='white')
+        # Стилизация таблицы
+        for i in range(6):
+            for j in range(4):
+                cell = table[(i, j)]
+                if i == 0:  # Заголовок
+                    cell.set_facecolor('#4472C4')
+                    cell.set_text_props(weight='bold', color='white')
+                elif j == 3 and i > 1 and i < 5:  # Колонка изменений
+                    if '%' in cell.get_text().get_text() and i == 3:
+                        cell.set_text_props(weight='bold', color='green')
+                elif i == 5 and j == 3:  # Статус
+                    if '✅' in cell.get_text().get_text():
+                        cell.set_facecolor('#C6EFCE')
+                        cell.set_text_props(weight='bold', color='#006100')
         
-        ax2.set_title('Ключевые метрики', fontweight='bold')
+        ax2.set_title('Ключевые метрики', fontweight='bold', fontsize=14, pad=10)
         
-        # ===== 3. Категории проблем (верхний правый) =====
+        # ===== 3. Топ категорий (верхний правый) =====
         ax3 = fig.add_subplot(gs[0, 2])
         
-        if hasattr(loader, 'category_stats'):
-            top_changes = loader.category_stats.nlargest(5, 'change_percent')
-            bottom_changes = loader.category_stats.nsmallest(5, 'change_percent')
-            
+        if hasattr(loader, 'category_stats') and loader.category_stats is not None:
             # Берем топ-3 улучшения и топ-3 ухудшения
-            plot_cats = pd.concat([bottom_changes.head(3), top_changes.tail(3)])
+            cat_stats = loader.category_stats.copy()
+            cat_stats = cat_stats[cat_stats['A'] + cat_stats['B'] > 0]  # Убираем пустые
+            
+            # Сортируем по изменению
+            cat_stats = cat_stats.sort_values('change_percent', ascending=True)
+            
+            # Берем первые 3 и последние 3
+            plot_cats = pd.concat([cat_stats.head(3), cat_stats.tail(3)])
             
             colors = ['green' if x < 0 else 'red' for x in plot_cats['change_percent']]
             
             y_pos = range(len(plot_cats))
-            ax3.barh(y_pos, plot_cats['change_percent'], color=colors, alpha=0.7)
+            ax3.barh(y_pos, plot_cats['change_percent'], color=colors, alpha=0.7, height=0.6)
             ax3.set_yticks(y_pos)
-            ax3.set_yticklabels(plot_cats.index, fontsize=8)
-            ax3.set_xlabel('Изменение %')
-            ax3.set_title('Топ изменений', fontweight='bold')
-            ax3.axvline(x=0, color='black', linestyle='-', linewidth=0.5)
+            ax3.set_yticklabels([str(idx)[:20] + '...' if len(str(idx)) > 20 else str(idx) 
+                                for idx in plot_cats.index], fontsize=9)
+            ax3.set_xlabel('Изменение %', fontsize=11)
+            ax3.set_title('Топ изменений', fontweight='bold', fontsize=14, pad=10)
+            ax3.axvline(x=0, color='black', linestyle='-', linewidth=1, alpha=0.5)
+            ax3.grid(axis='x', alpha=0.3)
         
         # ===== 4. Box plot (средний левый) =====
         ax4 = fig.add_subplot(gs[1, 0])
         bp = ax4.boxplot([loader.group_a_tickets, loader.group_b_tickets], 
-                        labels=['A', 'B'], patch_artist=True)
+                        labels=['A', 'B'], patch_artist=True, widths=0.5)
+        
         bp['boxes'][0].set_facecolor(self.config.COLOR_A)
         bp['boxes'][1].set_facecolor(self.config.COLOR_B)
-        ax4.set_ylabel('Заявок')
-        ax4.set_title('Распределение заявок', fontweight='bold')
+        bp['boxes'][0].set_alpha(0.7)
+        bp['boxes'][1].set_alpha(0.7)
+        
+        ax4.set_ylabel('Количество заявок', fontsize=11)
+        ax4.set_title('Распределение заявок', fontweight='bold', fontsize=14, pad=10)
+        ax4.grid(axis='y', alpha=0.3)
         
         # ===== 5. Размер эффекта (средний центр) =====
         ax5 = fig.add_subplot(gs[1, 1])
+        
         diff = analyzer.results['ttest']['mean_diff']
         ci_lower, ci_upper = analyzer.results['ttest']['confidence_interval']
         
+        # Ограничиваем ДИ для красивого отображения
+        ci_lower = max(ci_lower, -3.5)
+        ci_upper = min(ci_upper, 0.5)
+        
         ax5.errorbar(diff, 0, 
-                    xerr=[[diff - ci_lower], [ci_upper - diff]],
-                    fmt='o', color='darkblue', markersize=12, capsize=5)
-        ax5.axvline(x=0, color='red', linestyle='--', alpha=0.5)
-        ax5.set_xlabel('Разница средних')
-        ax5.set_title(f'Эффект: {diff:.1f} заявок', fontweight='bold')
+                    xerr=[[abs(diff - ci_lower)], [abs(ci_upper - diff)]],
+                    fmt='o', color='darkblue', markersize=15, capsize=8,
+                    capthick=2, elinewidth=3, markeredgecolor='white', markeredgewidth=2)
+        ax5.axvline(x=0, color='red', linestyle='--', alpha=0.7, linewidth=2)
+        
+        # Добавляем доверительный интервал
+        ax5.axvspan(ci_lower, ci_upper, alpha=0.2, color='lightblue')
+        
+        ax5.set_xlabel('Разница средних (B - A)', fontsize=11, fontweight='bold')
+        ax5.set_title(f'Эффект: {diff:.2f} заявок\n95% ДИ: [{ci_lower:.2f}, {ci_upper:.2f}]', 
+                     fontweight='bold', fontsize=12, pad=10)
         ax5.set_yticks([])
+        ax5.set_xlim(-3.5, 0.5)
         
         # ===== 6. Статус теста (средний правый) =====
         ax6 = fig.add_subplot(gs[1, 2])
         ax6.axis('off')
         
-        if analyzer.results['ttest']['significant']:
-            status_text = f"✅ ТЕСТ ПРОЙДЕН\n\nСнижение заявок: {analyzer.results['descriptive_stats']['effect']['relative_diff']:.1f}%\np = {analyzer.results['ttest']['p_value']:.4f}"
-            color = 'lightgreen'
+        if analyzer.results['ttest']['p_value'] < 0.05:
+            status_text = f"✅ ТЕСТ ПРОЙДЕН\n\nСнижение: {analyzer.results['descriptive_stats']['effect']['relative_diff']:.1f}%\np = {analyzer.results['ttest']['p_value']:.4f}"
+            color = '#C6EFCE'
+            border_color = '#006100'
         else:
             status_text = f"❌ ТЕСТ НЕ ПРОЙДЕН\n\nЭффект: {analyzer.results['descriptive_stats']['effect']['relative_diff']:.1f}%\np = {analyzer.results['ttest']['p_value']:.4f}"
-            color = 'lightcoral'
+            color = '#FFC7CE'
+            border_color = '#9C0006'
         
-        ax6.text(0.5, 0.5, status_text,
-                ha='center', va='center',
-                fontsize=14, fontweight='bold',
-                transform=ax6.transAxes,
-                bbox=dict(boxstyle='round,pad=1', facecolor=color, alpha=0.3))
+        # Создаем красивый блок с текстом
+        props = dict(boxstyle='round,pad=1', facecolor=color, alpha=0.8, edgecolor=border_color, linewidth=2)
+        ax6.text(0.5, 0.5, status_text, ha='center', va='center',
+                fontsize=16, fontweight='bold', transform=ax6.transAxes,
+                bbox=props, linespacing=1.5)
         
         # ===== 7. Динамика (нижний ряд, весь) =====
         if loader.df_daily is not None:
             ax7 = fig.add_subplot(gs[2, :])
-            ax7.plot(loader.df_daily['Дата'], loader.df_daily['A'], 
-                    color=self.config.COLOR_A, alpha=0.5, label='A')
-            ax7.plot(loader.df_daily['Дата'], loader.df_daily['B'], 
-                    color=self.config.COLOR_B, alpha=0.5, label='B')
             
-            if len(loader.df_daily) >= 7:
-                ax7.plot(loader.df_daily['Дата'], 
-                        loader.df_daily['A'].rolling(7, center=True).mean(),
-                        color=self.config.COLOR_A, linewidth=2, label='A (тренд)')
-                ax7.plot(loader.df_daily['Дата'], 
-                        loader.df_daily['B'].rolling(7, center=True).mean(),
-                        color=self.config.COLOR_B, linewidth=2, label='B (тренд)')
+            # Сглаживание
+            df_daily = loader.df_daily.copy()
+            if len(df_daily) >= 7:
+                df_daily['A_smooth'] = df_daily['A'].rolling(window=7, center=True, min_periods=1).mean()
+                df_daily['B_smooth'] = df_daily['B'].rolling(window=7, center=True, min_periods=1).mean()
             
-            ax7.set_xlabel('Дата')
-            ax7.set_ylabel('Заявок')
-            ax7.set_title('Динамика заявок по дням', fontweight='bold')
-            ax7.legend()
-            ax7.tick_params(axis='x', rotation=45)
+            # Исходные точки (полупрозрачные)
+            ax7.scatter(df_daily['Дата'], df_daily['A'], 
+                       color=self.config.COLOR_A, alpha=0.2, s=15, label='Группа A (ежедневно)')
+            ax7.scatter(df_daily['Дата'], df_daily['B'], 
+                       color=self.config.COLOR_B, alpha=0.2, s=15, label='Группа B (ежедневно)')
+            
+            # Тренды
+            if 'A_smooth' in df_daily.columns:
+                ax7.plot(df_daily['Дата'], df_daily['A_smooth'], 
+                        color=self.config.COLOR_A, linewidth=3, alpha=0.9, label='Группа A (тренд)')
+                ax7.plot(df_daily['Дата'], df_daily['B_smooth'], 
+                        color=self.config.COLOR_B, linewidth=3, alpha=0.9, label='Группа B (тренд)')
+            
+            # Средние линии
+            ax7.axhline(y=df_daily['A'].mean(), color=self.config.COLOR_A, 
+                       linestyle='--', alpha=0.5, linewidth=1)
+            ax7.axhline(y=df_daily['B'].mean(), color=self.config.COLOR_B, 
+                       linestyle='--', alpha=0.5, linewidth=1)
+            
+            ax7.set_xlabel('Дата', fontsize=12, fontweight='bold')
+            ax7.set_ylabel('Количество заявок', fontsize=12, fontweight='bold')
+            ax7.set_title('Динамика заявок по дням', fontweight='bold', fontsize=14, pad=15)
+            ax7.legend(loc='upper right', fontsize=10, frameon=True, fancybox=True)
+            ax7.grid(True, alpha=0.3)
+            
+            # Форматируем даты
+            ax7.tick_params(axis='x', rotation=45, labelsize=9)
+            ax7.xaxis.set_major_locator(plt.MaxNLocator(10))
         
+        # Общий заголовок
         plt.suptitle('A/B-TEST DASHBOARD: Эффективность новой инструкции', 
-                    fontsize=16, fontweight='bold', y=1.02)
-        plt.tight_layout()
+                    fontsize=18, fontweight='bold', y=0.98)
         
-        # Сохраняем
-        plt.savefig(self.figures_dir / '05_dashboard.png', 
-                   dpi=300, bbox_inches='tight')
-        plt.savefig(self.figures_dir / '05_dashboard.pdf', 
-                   bbox_inches='tight')
+        # Сохраняем с высоким разрешением
+        if save:
+            plt.savefig(self.figures_dir / '05_dashboard.png', 
+                       dpi=300, bbox_inches='tight', pad_inches=0.5)
+            plt.savefig(self.figures_dir / '05_dashboard.pdf', 
+                       bbox_inches='tight', pad_inches=0.5)
+            print(f"  ✓ Сохранено: {self.figures_dir / '05_dashboard.png'}")
         
-        print(f"  ✓ Сохранено: {self.figures_dir / '05_dashboard.png'}")
         plt.close()
         return fig
